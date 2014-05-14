@@ -1,9 +1,10 @@
 # TODO: some request/response class to load the various libary's implementations and allow for comparison
 
 import gevent
-from gevent import pywsgi
+import gevent.greenlet
+import gevent.wsgi
 import grequests
-from flask import Flask, request, Response
+from bottle import Bottle, request, Response
 import threading
 from collections import defaultdict
 
@@ -50,6 +51,7 @@ class testcase(object):
 
 
 # TODO: force http access log somewhere else
+# TODO: no threads?
 class DynamicHTTPEndpoint(threading.Thread):
     @property
     def address(self):
@@ -59,22 +61,15 @@ class DynamicHTTPEndpoint(threading.Thread):
         threading.Thread.__init__(self)
         self.daemon = True
 
+        self.ready = threading.Event()
+
         # ref to the test case's dict of requests
         self.requests = requests
         # dict of pathname -> function
         self.handlers = {}
 
-        self.app = Flask(__name__)
-        self.app.config.from_object(__name__)
+        self.app = Bottle()
 
-        # hook the response (so we can hand it back)
-        @self.app.after_request
-        def print_response(response):
-            # TODO: keep track of these
-            # TODO: deepcopy?
-            # update the TESTS dict with the request
-            #self.requests[request.headers[REQUEST_ID_HEADER]]['server_response'] = response
-            return response
 
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
@@ -110,10 +105,18 @@ class DynamicHTTPEndpoint(threading.Thread):
 
     def run(self):
         # TODO: port for the config
-        self.server = pywsgi.WSGIServer(('', 0),
-                                        self.app.wsgi_app)
-        self.server.serve_forever()
+        self.server = gevent.wsgi.WSGIServer(('', 0),
+                                              self.app.wsgi)
+        self.server.start()
+        # mark it as ready
+        self.ready.set()
+        # serve it
+        try:
+            self.server._stop_event.wait()
+        finally:
+            gevent.greenlet.Greenlet.spawn(self.server.stop).join()
 
+# TODO: use
 # helper function to make test writing cleaner
 def send_request(req):
     '''

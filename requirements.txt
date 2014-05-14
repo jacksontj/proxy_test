@@ -1,4 +1,4 @@
 gevent
 grequests
-flask
+bottle
 nose-gevented-multiprocess
