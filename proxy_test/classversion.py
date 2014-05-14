@@ -13,6 +13,7 @@ import requests
 from collections import defaultdict
 
 
+# TODO: use these
 # some Globals
 REQUEST_ID_HEADER = 'X-Request-Id'
 TEST_MODULE_HEADER = 'X-Test-Module'
@@ -23,6 +24,7 @@ class BaseProxyTest(unittest.TestCase):
     # configuration options that will be shared amongst the test cases.
     # primarily where the proxy is
 
+    # TODO: open some classmethod to set these
     # if we configure an open proxy, we can just overwrite the IP/port but leave host headers etc
     static_proxies = {
       'http': 'http://127.0.0.1:8081',
@@ -40,7 +42,7 @@ class BaseProxyTest(unittest.TestCase):
         # dict of testid -> {client_request, client_response}
         self.requests = defaultdict(dict)
 
-        # TODO: pass down a port? Or dynamically allocate one (or both)
+        # TODO: only start if you are going to use it? Lazy start
         self.http_endpoint = proxy_test.DynamicHTTPEndpoint(self.requests)
         self.http_endpoint.start()
 
