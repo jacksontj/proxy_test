@@ -1,0 +1,4 @@
+gevent
+grequests
+flask
+nose-gevented-multiprocess

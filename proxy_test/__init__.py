@@ -51,9 +51,18 @@ class testcase(object):
 
 # TODO: force http access log somewhere else
 class DynamicHTTPEndpoint(threading.Thread):
-    def __init__(self):
+    @property
+    def address(self):
+        return self.server.address
+
+    def __init__(self, requests):
         threading.Thread.__init__(self)
         self.daemon = True
+
+        # ref to the test case's dict of requests
+        self.requests = requests
+        # dict of pathname -> function
+        self.handlers = {}
 
         self.app = Flask(__name__)
         self.app.config.from_object(__name__)
@@ -61,30 +70,47 @@ class DynamicHTTPEndpoint(threading.Thread):
         # hook the response (so we can hand it back)
         @self.app.after_request
         def print_response(response):
+            # TODO: keep track of these
             # TODO: deepcopy?
             # update the TESTS dict with the request
-            REQUESTS[request.headers[REQUEST_ID_HEADER]]['server_response'] = response
+            #self.requests[request.headers[REQUEST_ID_HEADER]]['server_response'] = response
             return response
 
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
         def catch_all(path):
+            # TODO: keep track of these
             # TODO: deepcopy?
             # update the TESTS dict with the request
-            REQUESTS[request.headers[REQUEST_ID_HEADER]]['server_request'] = 1 #request
+            #self.requests[request.headers[REQUEST_ID_HEADER]]['server_request'] = 1 #request
 
             # get path key
-            if request.headers.get(TEST_MODULE_HEADER) and request.headers.get(TEST_FUNCTION_HEADER):
-                key = (request.headers.get(TEST_MODULE_HEADER), request.headers.get(TEST_FUNCTION_HEADER))
-                if path in register_endpoint.function_endpoint_map.get(key, {}):
-                    return register_endpoint.function_endpoint_map[key][path](request)
+            if path in self.handlers:
+                return self.handlers[path](request)
 
-            print path
-            return 'defualtreturn: ' + path + '\n'
+            # return a 404 since we didn't find it
+            return 'defualtreturn: ' + path + '\n', 404
+
+    def normalize_path(self, path):
+        if path.startswith('/'):
+            return path[1:]
+        return path
+
+    def add_handler(self, path, func):
+        path = self.normalize_path(path)
+        if path in self.handlers:
+            raise Exception()
+        self.handlers[path] = func
+
+    def remove_handler(self, path):
+        path = self.normalize_path(path)
+        if path not in self.handlers:
+            raise Exception()
+        del self.handlers[path]
 
     def run(self):
         # TODO: port for the config
-        self.server = pywsgi.WSGIServer(('', 12346),
+        self.server = pywsgi.WSGIServer(('', 0),
                                         self.app.wsgi_app)
         self.server.serve_forever()
 
@@ -114,5 +140,3 @@ def send_request(req):
 
     REQUESTS[request_id]['client_response'] = client_response
     return REQUESTS[request_id]
-
-
