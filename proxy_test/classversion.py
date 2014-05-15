@@ -38,6 +38,9 @@ class BaseProxyTest(unittest.TestCase):
 
         self.http_endpoint.ready.wait()
 
+        # create local requester object
+        self.track_requests = proxy_test.TrackingRequests(self.http_endpoint)
+
     def tearDown(self):
         '''
         Kill the tests that are in flight?
@@ -73,6 +76,13 @@ class ExampleTests(BaseProxyTest):
                                   proxies=BaseProxyTest.static_proxies)
         assert proxy_ret.status_code == 200
 
+        tmp = self.track_requests.get('http://127.0.0.1:{0}/footest'.format(self.http_endpoint.address[1]),
+                                      proxies=BaseProxyTest.static_proxies)
+        assert tmp['client_response'].status_code == tmp['server_response'].status_code
+        # make sure no one changed the headers
+        # server_response headers are empty, since we didn't set any
+        #assert dict(tmp['client_response'].headers) == dict(tmp['server_response'].headers)
+
 
 class HeaderRewriteTests(BaseProxyTest):
     def testFabricName(self):
@@ -80,46 +90,25 @@ class HeaderRewriteTests(BaseProxyTest):
         import json
 
         def headers(request):
-            '''
-            Spit back the headers as a json encoded string
-            '''
-            assert request.headers['X-Li-Pop'] == 'PROD-ELA4'
-            assert request.headers['UUID'] == '1'
-            return json.dumps(dict(request.headers))
+            return 'echo'
 
         self.http_endpoint.add_handler('/headers', headers)
 
-        proxy_ret = requests.get('http://127.0.0.1:{0}/headers'.format(self.http_endpoint.address[1]),
-                                  headers={'__COOL_TEST_KEY__': 1},
-                                  proxies=BaseProxyTest.static_proxies)
+        track_ret = self.track_requests.get('http://127.0.0.1:{0}/headers'.format(self.http_endpoint.address[1]),
+                                             proxies=BaseProxyTest.static_proxies)
 
-        '''
-        TODO: create some class which wraps the get mechanisms to add the magic header for tracking
-        and will return an object which contains:
-            client_request
-            client_response
-            server_request
-            server_response
+        HEADER_KEY = 'X-Li-Pop'
+        HEADER_VALUE = 'PROD-ELA4'
 
-
-        proxy_ret, server_req = self.fakerequests.get('http://127.0.0.1:{0}/headers'.format(self.http_endpoint.address[1]),
-                                                      proxies=BaseProxyTest.static_proxies)
-
-        '''
-
-        assert proxy_ret.status_code == 200
-        # check that the response had the header
-        assert proxy_ret.headers['X-Li-Pop'] == 'PROD-ELA4'
-
-        # check that the origin saw the same header
-        server_headers = proxy_ret.json()
-        assert server_headers['X-Li-Pop'] == 'PROD-ELA4'
+        assert track_ret['server_request'].headers[HEADER_KEY] == HEADER_VALUE
+        assert track_ret['server_response'].headers[HEADER_KEY] == HEADER_VALUE
+        assert track_ret['client_response'].headers[HEADER_KEY] == HEADER_VALUE
 
 
 
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(HeaderRewriteTests)
+    suite = unittest.TestLoader().loadTestsFromTestCase(ExampleTests)
     #from nose_gevented_multiprocess.nose_gevented_multiprocess import GeventedMultiProcess
     #nose.main(suite=suite, addplugins=[GeventedMultiProcess()])
     nose.main(suite=suite)

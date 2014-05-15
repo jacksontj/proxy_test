@@ -4,9 +4,10 @@ import gevent
 import gevent.greenlet
 import gevent.wsgi
 import grequests
-from bottle import Bottle, request, Response
+from bottle import Bottle, request, hook, response
 import threading
 from collections import defaultdict
+import requests
 
 import inspect
 
@@ -49,6 +50,40 @@ class testcase(object):
     def __init__(self, function):
         self.functions.append(function)
 
+class TrackingRequests():
+    def __init__(self, endpoint):
+        self.endpoint = endpoint
+    def __getattr__(self, name):
+        def handlerFunction(*args,**kwargs):
+            # if requests doesn't have a method with this name
+            if not hasattr(requests, name):
+                raise AttributeError()
+            func = getattr(requests, name)
+
+            # set some kwargs
+
+            # set the tracking header
+            if 'headers' not in kwargs:
+                kwargs['headers'] = {}
+            key = self.endpoint.get_tracking_key()
+            kwargs['headers'][self.endpoint.TRACKING_HEADER] = key
+
+            ret = {}
+            resp = func(*args, **kwargs)
+
+            server_resp = self.endpoint.get_tracking_by_key(key)
+
+            # TODO: implement client_request
+            # TODO: create intermediate objects that you can compare
+            #ret['client_request'] = None
+            ret['client_response'] = resp
+            ret['server_request'] = server_resp['request']
+            ret['server_response'] = server_resp['response']
+
+            return ret
+
+            print name,args,kwargs
+        return handlerFunction
 
 # TODO: force http access log somewhere else
 # TODO: no threads?
@@ -61,6 +96,9 @@ class DynamicHTTPEndpoint(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
+        # dict to store request data in
+        self.tracked_requests = {}
+
         self.daemon = True
 
         self.ready = threading.Event()
@@ -71,6 +109,23 @@ class DynamicHTTPEndpoint(threading.Thread):
         self.app = Bottle()
 
 
+        @self.app.hook('before_request')
+        def save_request():
+            '''
+            If the tracking header is set, save the request
+            '''
+            if request.headers.get(self.TRACKING_HEADER):
+                self.tracked_requests[request.headers[self.TRACKING_HEADER]] = {'request': request}
+
+
+        @self.app.hook('after_request')
+        def save_response():
+            '''
+            If the tracking header is set, save the response
+            '''
+            if request.headers.get(self.TRACKING_HEADER):
+                self.tracked_requests[request.headers[self.TRACKING_HEADER]]['response'] = response
+
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
         def catch_all(path=''):
@@ -80,6 +135,22 @@ class DynamicHTTPEndpoint(threading.Thread):
 
             # return a 404 since we didn't find it
             return 'defualtreturn: ' + path + '\n'
+
+    def get_tracking_key(self):
+        '''
+        Return a new key for tracking a request by key
+        '''
+        key = str(len(self.tracked_requests))
+        self.tracked_requests[key] = {}
+        return key
+
+    def get_tracking_by_key(self, key):
+        '''
+        Return tracking data by key
+        '''
+        if key not in self.tracked_requests:
+            raise Exception()
+        return self.tracked_requests[key]
 
     def normalize_path(self, path):
         '''
