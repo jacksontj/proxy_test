@@ -3,7 +3,8 @@ TODO: parallelize nosetest runs with gevent plugin
     https://groups.google.com/forum/#!topic/nose-users/8JgyeMiWGnA
 '''
 import nose
-import unittest
+# TODO: switch for python 2.6 and 2.7
+import unittest2 as unittest
 
 
 import time
@@ -35,10 +36,7 @@ class BaseProxyTest(unittest.TestCase):
         cls.track_requests = proxy_test.TrackingRequests(cls.http_endpoint)
 
     @classmethod
-    def tearDownClass(self):
-        '''
-        Kill the tests that are in flight?
-        '''
+    def tearDownClass(cls):
         pass
 
 import subprocess
@@ -49,11 +47,18 @@ class ATSDynamicTest(BaseProxyTest):
     This class will start/stop trafficserver instances for you, and apply
     any configuration overrides that you may have
     '''
+
+    @property
+    def ats_proxies(self):
+        return {'http': 'http://127.0.0.2:12271',
+                'https': 'http://127.0.0.2:12271'}
+
     @classmethod
     def setUpClass(cls):
         '''
         Start up your own ats instance
         '''
+        super(ATSDynamicTest, cls).setUpClass()
 
         # TODO: create your own config root
         # TODO: copy/template over the configs (with overrides)
@@ -61,9 +66,22 @@ class ATSDynamicTest(BaseProxyTest):
         env = os.environ.copy()
         env['TS_ROOT'] = '/tmp/ats_test'
 
+        # TODO: bind to different loop back ips instead of seperate ports
+
         # TODO: redirect stdin/stdout
-        cls.ats = subprocess.Popen(['traffic_server'],
+        cls.ats = subprocess.Popen(['/usr/local/bin/traffic_server'], #, '-T', '.*'],
                                    env=env)
+
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        while True:
+            try:
+                print 'attempt to connect'
+                s.connect(('127.0.0.2', 12271))
+                s.close()
+                break
+            except:
+                time.sleep(0.001)
 
 
     @classmethod
@@ -71,6 +89,7 @@ class ATSDynamicTest(BaseProxyTest):
         '''
         stop the ats instance you started
         '''
+        super(ATSDynamicTest, cls).setUpClass()
         cls.ats.kill()
         cls.ats.wait()
 
@@ -83,8 +102,22 @@ class ATSDynamicTest(BaseProxyTest):
         assert ret.status_code == 200
 
         # proxy through to it
-        ret = requests.get('http://www.linkedin.com', proxies=BaseProxyTest.static_proxies)
+        ret = requests.get('http://www.linkedin.com', proxies=self.ats_proxies)
         assert ret.status_code == 200
+
+    def testEcho(self):
+        def echo(request):
+            return 'echo!'
+        # add the endpoint
+        self.http_endpoint.add_handler('/footest', echo)
+
+        proxy_ret = requests.get('http://127.0.0.1:{0}/footest'.format(self.http_endpoint.address[1]),
+                                  proxies=self.ats_proxies)
+        assert proxy_ret.status_code == 200
+
+        tmp = self.track_requests.get('http://127.0.0.1:{0}/footest'.format(self.http_endpoint.address[1]),
+                                      proxies=self.ats_proxies)
+        assert tmp['client_response'].status_code == tmp['server_response'].status_code
 
 
 class ExampleTests(BaseProxyTest):

@@ -39,9 +39,6 @@ class TrackingRequests():
         self.endpoint = endpoint
     def __getattr__(self, name):
         def handlerFunction(*args,**kwargs):
-            # if requests doesn't have a method with this name
-            if not hasattr(requests, name):
-                raise AttributeError()
             func = getattr(requests, name)
 
             # set some kwargs
@@ -59,14 +56,13 @@ class TrackingRequests():
 
             # TODO: implement client_request
             # TODO: create intermediate objects that you can compare
-            #ret['client_request'] = None
+            ret['client_request'] = resp.request
             ret['client_response'] = resp
             ret['server_request'] = server_resp['request']
             ret['server_response'] = server_resp['response']
 
             return ret
 
-            print name,args,kwargs
         return handlerFunction
 
 # TODO: force http access log somewhere else
