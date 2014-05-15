@@ -13,7 +13,6 @@ import requests
 from collections import defaultdict
 
 
-# TODO: use these
 # some Globals
 REQUEST_ID_HEADER = 'X-Request-Id'
 TEST_MODULE_HEADER = 'X-Test-Module'
@@ -24,7 +23,6 @@ class BaseProxyTest(unittest.TestCase):
     # configuration options that will be shared amongst the test cases.
     # primarily where the proxy is
 
-    # TODO: open some classmethod to set these
     # if we configure an open proxy, we can just overwrite the IP/port but leave host headers etc
     static_proxies = {
       'http': 'http://127.0.0.1:8081',
@@ -37,25 +35,10 @@ class BaseProxyTest(unittest.TestCase):
         '''
         Start up your own endpoint
         '''
-
-        # create the variables keep track of endpoints
-        # dict of testid -> {client_request, client_response}
-        self.requests = defaultdict(dict)
-
-        # TODO: only start if you are going to use it? Lazy start
-        self.http_endpoint = proxy_test.DynamicHTTPEndpoint(self.requests)
+        self.http_endpoint = proxy_test.DynamicHTTPEndpoint()
         self.http_endpoint.start()
 
-        started = False
-        # wait for the thread to start up
-        # TODO: better way to tell if the server is started?
-        while not started:
-            try:
-                started = self.http_endpoint.server.started
-            except AttributeError as e:
-                print 'endpoint not started', e
-            time.sleep(1)
-        time.sleep(1)
+        self.http_endpoint.ready.wait()
 
     def tearDown(self):
         '''
@@ -67,26 +50,28 @@ class BaseProxyTest(unittest.TestCase):
 
 
 class ExampleTests(BaseProxyTest):
+    _multiprocess_shared_ = True
     def testInternet(self):
         '''
         Some basic tests, can we hit public sites through a regular proxy
         '''
         # make sure we can hit it directly
+        # TODO: make this less ugly, some helper function/class
         ret = requests.get('http://www.linkedin.com')
         assert ret.status_code == 200
 
         # proxy through it
-        proxy_ret = requests.get('http://www.linkedin.com', proxies=BaseProxyTest.static_proxies)
-        assert proxy_ret.status_code == 200
+        ret = requests.get('http://www.linkedin.com', proxies=BaseProxyTest.static_proxies)
+        assert ret.status_code == 200
 
     def testEcho(self):
         # create an endpoint to register
         def echo(request):
-            return 'echo!', 200
+            return 'echo!'
         # add the endpoint
         self.http_endpoint.add_handler('/footest', echo)
 
-        proxy_ret = requests.get('http://localhost:{0}/footest'.format(self.http_endpoint.address[1]),
+        proxy_ret = requests.get('http://127.0.0.1:{0}/footest'.format(self.http_endpoint.address[1]),
                                   proxies=BaseProxyTest.static_proxies)
         assert proxy_ret.status_code == 200
 
@@ -94,4 +79,6 @@ class ExampleTests(BaseProxyTest):
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(ExampleTests)
+    #from nose_gevented_multiprocess.nose_gevented_multiprocess import GeventedMultiProcess
+    #nose.main(suite=suite, addplugins=[GeventedMultiProcess()])
     nose.main(suite=suite)
