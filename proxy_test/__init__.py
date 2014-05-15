@@ -18,37 +18,21 @@ REQUEST_ID_HEADER = 'X-Request-Id'
 TEST_MODULE_HEADER = 'X-Test-Module'
 TEST_FUNCTION_HEADER = 'X-Test-Function'
 
+# TODO: something which can do the endpoint registration with a decorator
+class endpoint(object):
+    def __get__(self, obj, objtype):
+        """Support instance methods."""
+        import functools
+        return functools.partial(self.__call__, obj)
 
-class register_endpoint(object):
-    '''
-    Decorator that allows you to dynamically register endpoints within your test
-    '''
-    # (file, function) -> {path -> endpoint}
-    function_endpoint_map = defaultdict(dict)
+    def __init__(self, f):
+        self.func = f
+        import functools
+        raise Exception(dir(functools.partial(self.__call__, f)))
 
-    def __init__(self, endpoint_map):
-        self.endpoint_map = endpoint_map
-
-    def __call__(self, function):
-        '''
-        The decorator is "__call__"d with the function, we take that function
-        and determine which module and function name it is to store in the
-        class wide depandancy_dict
-        '''
-        module = inspect.getmodule(inspect.stack()[1][0])
-        key = (module.__name__, function.__name__)
-        self.function_endpoint_map[key] = self.endpoint_map
-
-        return function
-
-class testcase(object):
-    '''
-    Decorator used to decorate a function as a testcase
-    '''
-    functions = []
-
-    def __init__(self, function):
-        self.functions.append(function)
+    def __call__(self, *args):
+        raise Exception(args)
+        self.func(*args)
 
 class TrackingRequests():
     def __init__(self, endpoint):
@@ -86,7 +70,7 @@ class TrackingRequests():
         return handlerFunction
 
 # TODO: force http access log somewhere else
-# TODO: no threads?
+# TODO: no threads? Maybe greenlet
 class DynamicHTTPEndpoint(threading.Thread):
     TRACKING_HEADER = '__cool_test_header__'
 
@@ -190,6 +174,13 @@ class DynamicHTTPEndpoint(threading.Thread):
         finally:
             gevent.greenlet.Greenlet.spawn(self.server.stop).join()
 
+
+
+'''
+OLD stuff, to delete on next refactor
+'''
+
+
 # TODO: use
 # helper function to make test writing cleaner
 def send_request(req):
@@ -217,3 +208,34 @@ def send_request(req):
 
     REQUESTS[request_id]['client_response'] = client_response
     return REQUESTS[request_id]
+
+class register_endpoint(object):
+    '''
+    Decorator that allows you to dynamically register endpoints within your test
+    '''
+    # (file, function) -> {path -> endpoint}
+    function_endpoint_map = defaultdict(dict)
+
+    def __init__(self, endpoint_map):
+        self.endpoint_map = endpoint_map
+
+    def __call__(self, function):
+        '''
+        The decorator is "__call__"d with the function, we take that function
+        and determine which module and function name it is to store in the
+        class wide depandancy_dict
+        '''
+        module = inspect.getmodule(inspect.stack()[1][0])
+        key = (module.__name__, function.__name__)
+        self.function_endpoint_map[key] = self.endpoint_map
+
+        return function
+
+class testcase(object):
+    '''
+    Decorator used to decorate a function as a testcase
+    '''
+    functions = []
+
+    def __init__(self, function):
+        self.functions.append(function)

@@ -10,12 +10,6 @@ import time
 import proxy_test
 import requests
 
-from collections import defaultdict
-
-
-# some Globals
-REQUEST_ID_HEADER = 'X-Request-Id'
-
 
 class BaseProxyTest(unittest.TestCase):
     # configuration options that will be shared amongst the test cases.
@@ -27,28 +21,70 @@ class BaseProxyTest(unittest.TestCase):
       'https': 'http://127.0.0.1:8081',
     }
 
-    # TODO: dynamic proxies? Something that can spin up/tear down proxies
-
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         '''
         Start up your own endpoint
         '''
-        self.http_endpoint = proxy_test.DynamicHTTPEndpoint()
-        self.http_endpoint.start()
+        cls.http_endpoint = proxy_test.DynamicHTTPEndpoint()
+        cls.http_endpoint.start()
 
-        self.http_endpoint.ready.wait()
+        cls.http_endpoint.ready.wait()
 
         # create local requester object
-        self.track_requests = proxy_test.TrackingRequests(self.http_endpoint)
+        cls.track_requests = proxy_test.TrackingRequests(cls.http_endpoint)
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(self):
         '''
         Kill the tests that are in flight?
         '''
         pass
 
-    # TODO: some function to get request/response x4 for everything
-    # for now i'll leave it up to you
+import subprocess
+import os
+
+class ATSDynamicTest(BaseProxyTest):
+    '''
+    This class will start/stop trafficserver instances for you, and apply
+    any configuration overrides that you may have
+    '''
+    @classmethod
+    def setUpClass(cls):
+        '''
+        Start up your own ats instance
+        '''
+
+        # TODO: create your own config root
+        # TODO: copy/template over the configs (with overrides)
+        # start up trafficserver
+        env = os.environ.copy()
+        env['TS_ROOT'] = '/tmp/ats_test'
+
+        # TODO: redirect stdin/stdout
+        cls.ats = subprocess.Popen(['traffic_server'],
+                                   env=env)
+
+
+    @classmethod
+    def tearDownClass(cls):
+        '''
+        stop the ats instance you started
+        '''
+        cls.ats.kill()
+        cls.ats.wait()
+
+    def testInternet(self):
+        '''
+        Some basic tests, can we hit public sites through our dynamiclly started proxy
+        '''
+        # make sure we can hit it directly
+        ret = requests.get('http://www.linkedin.com')
+        assert ret.status_code == 200
+
+        # proxy through to it
+        ret = requests.get('http://www.linkedin.com', proxies=BaseProxyTest.static_proxies)
+        assert ret.status_code == 200
 
 
 class ExampleTests(BaseProxyTest):
@@ -57,11 +93,10 @@ class ExampleTests(BaseProxyTest):
         Some basic tests, can we hit public sites through a regular proxy
         '''
         # make sure we can hit it directly
-        # TODO: make this less ugly, some helper function/class
         ret = requests.get('http://www.linkedin.com')
         assert ret.status_code == 200
 
-        # proxy through it
+        # proxy through to it
         ret = requests.get('http://www.linkedin.com', proxies=BaseProxyTest.static_proxies)
         assert ret.status_code == 200
 
@@ -83,11 +118,8 @@ class ExampleTests(BaseProxyTest):
         # server_response headers are empty, since we didn't set any
         #assert dict(tmp['client_response'].headers) == dict(tmp['server_response'].headers)
 
-
 class HeaderRewriteTests(BaseProxyTest):
     def testFabricName(self):
-
-        import json
 
         def headers(request):
             return 'echo'
@@ -108,7 +140,7 @@ class HeaderRewriteTests(BaseProxyTest):
 
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(ExampleTests)
+    suite = unittest.TestLoader().loadTestsFromTestCase(ATSDynamicTest)
     #from nose_gevented_multiprocess.nose_gevented_multiprocess import GeventedMultiProcess
     #nose.main(suite=suite, addplugins=[GeventedMultiProcess()])
     nose.main(suite=suite)
