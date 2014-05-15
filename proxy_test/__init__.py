@@ -57,14 +57,12 @@ class DynamicHTTPEndpoint(threading.Thread):
     def address(self):
         return self.server.address
 
-    def __init__(self, requests):
+    def __init__(self):
         threading.Thread.__init__(self)
         self.daemon = True
 
         self.ready = threading.Event()
 
-        # ref to the test case's dict of requests
-        self.requests = requests
         # dict of pathname -> function
         self.handlers = {}
 
@@ -73,7 +71,7 @@ class DynamicHTTPEndpoint(threading.Thread):
 
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
-        def catch_all(path):
+        def catch_all(path=''):
             # TODO: keep track of these
             # TODO: deepcopy?
             # update the TESTS dict with the request
@@ -84,27 +82,35 @@ class DynamicHTTPEndpoint(threading.Thread):
                 return self.handlers[path](request)
 
             # return a 404 since we didn't find it
-            return 'defualtreturn: ' + path + '\n', 404
+            return 'defualtreturn: ' + path + '\n'
 
     def normalize_path(self, path):
+        '''
+        Normalize the path, since its common (and convenient) to start with / in your paths
+        '''
         if path.startswith('/'):
             return path[1:]
         return path
 
     def add_handler(self, path, func):
+        '''
+        Add a new handler attached to a specific path
+        '''
         path = self.normalize_path(path)
         if path in self.handlers:
             raise Exception()
         self.handlers[path] = func
 
     def remove_handler(self, path):
+        '''
+        remove a handler attached to a specific path
+        '''
         path = self.normalize_path(path)
         if path not in self.handlers:
             raise Exception()
         del self.handlers[path]
 
     def run(self):
-        # TODO: port for the config
         self.server = gevent.wsgi.WSGIServer(('', 0),
                                               self.app.wsgi)
         self.server.start()

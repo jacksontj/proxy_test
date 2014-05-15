@@ -37,12 +37,7 @@ class BaseProxyTest(unittest.TestCase):
         '''
         Start up your own endpoint
         '''
-        # create the variables keep track of endpoints
-        # dict of testid -> {client_request, client_response}
-        self.requests = defaultdict(dict)
-
-        # TODO: pass down a port? Or dynamically allocate one (or both)
-        self.http_endpoint = proxy_test.DynamicHTTPEndpoint(self.requests)
+        self.http_endpoint = proxy_test.DynamicHTTPEndpoint()
         self.http_endpoint.start()
 
         self.http_endpoint.ready.wait()
@@ -76,14 +71,13 @@ class ExampleTests(BaseProxyTest):
         assert ret.status_code == 200
 
     def testEcho(self):
-        return
         # create an endpoint to register
         def echo(request):
-            return 'echo!', 200
+            return 'echo!'
         # add the endpoint
         self.http_endpoint.add_handler('/footest', echo)
 
-        proxy_ret = requests.get('http://localhost:{0}/footest'.format(self.http_endpoint.address[1]),
+        proxy_ret = requests.get('http://127.0.0.1:{0}/footest'.format(self.http_endpoint.address[1]),
                                   proxies=BaseProxyTest.static_proxies)
         assert proxy_ret.status_code == 200
 
@@ -95,4 +89,5 @@ class ExampleTests2(ExampleTests):
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(ExampleTests)
     #from nose_gevented_multiprocess.nose_gevented_multiprocess import GeventedMultiProcess
-    nose.main(suite=suite)#, addplugins=[GeventedMultiProcess()])
+    #nose.main(suite=suite, addplugins=[GeventedMultiProcess()])
+    nose.main(suite=suite)
