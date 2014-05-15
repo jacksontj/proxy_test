@@ -53,6 +53,8 @@ class testcase(object):
 # TODO: force http access log somewhere else
 # TODO: no threads?
 class DynamicHTTPEndpoint(threading.Thread):
+    TRACKING_HEADER = '__cool_test_header__'
+
     @property
     def address(self):
         return self.server.address
@@ -63,7 +65,7 @@ class DynamicHTTPEndpoint(threading.Thread):
 
         self.ready = threading.Event()
 
-        # dict of pathname -> function
+        # dict of pathname (no starting /) -> function
         self.handlers = {}
 
         self.app = Bottle()
@@ -72,11 +74,6 @@ class DynamicHTTPEndpoint(threading.Thread):
         @self.app.route('/', defaults={'path': ''})
         @self.app.route('/<path:path>')
         def catch_all(path=''):
-            # TODO: keep track of these
-            # TODO: deepcopy?
-            # update the TESTS dict with the request
-            #self.requests[request.headers[REQUEST_ID_HEADER]]['server_request'] = 1 #request
-
             # get path key
             if path in self.handlers:
                 return self.handlers[path](request)
