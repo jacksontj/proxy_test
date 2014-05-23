@@ -3,8 +3,13 @@ TODO: parallelize nosetest runs with gevent plugin
     https://groups.google.com/forum/#!topic/nose-users/8JgyeMiWGnA
 '''
 import nose
-# TODO: switch for python 2.6 and 2.7
-import unittest2 as unittest
+
+# Support python 2.6
+import sys
+if sys.version_info < (2, 7):
+    import unittest2 as unittest
+else:
+    import unittest
 
 
 import time
