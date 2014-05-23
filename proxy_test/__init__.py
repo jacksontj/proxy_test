@@ -14,9 +14,6 @@ import inspect
 # dict of testid -> {client_request, client_response}
 REQUESTS = defaultdict(dict)
 
-REQUEST_ID_HEADER = 'X-Request-Id'
-TEST_MODULE_HEADER = 'X-Test-Module'
-TEST_FUNCTION_HEADER = 'X-Test-Function'
 
 # TODO: something which can do the endpoint registration with a decorator
 class endpoint(object):
@@ -42,7 +39,6 @@ class TrackingRequests():
             func = getattr(requests, name)
 
             # set some kwargs
-
             # set the tracking header
             if 'headers' not in kwargs:
                 kwargs['headers'] = {}
@@ -54,7 +50,6 @@ class TrackingRequests():
 
             server_resp = self.endpoint.get_tracking_by_key(key)
 
-            # TODO: implement client_request
             # TODO: create intermediate objects that you can compare
             ret['client_request'] = resp.request
             ret['client_response'] = resp
@@ -169,69 +164,3 @@ class DynamicHTTPEndpoint(threading.Thread):
             self.server._stop_event.wait()
         finally:
             gevent.greenlet.Greenlet.spawn(self.server.stop).join()
-
-
-
-'''
-OLD stuff, to delete on next refactor
-'''
-
-
-# TODO: use
-# helper function to make test writing cleaner
-def send_request(req):
-    '''
-    Send the response and return a list of the request/response on both ends
-    '''
-    # TODO: verify that its a grequests object?
-
-    # TODO: add the test_id to the request
-    request_id = str(len(REQUESTS) + 1)
-
-    # make sure we have header dict
-    if 'headers' not in req.kwargs:
-        req.kwargs['headers'] = {}
-    req.kwargs['headers'][REQUEST_ID_HEADER] =  request_id
-    req.kwargs['headers'][TEST_MODULE_HEADER] =  inspect.getmodule(inspect.stack()[1][0]).__name__
-    req.kwargs['headers'][TEST_FUNCTION_HEADER] =  inspect.stack()[1][3]
-
-    # add the testid to the request
-    REQUESTS[request_id] = {'client_request': req}
-
-    request_greenlet = grequests.send(req)
-    request_greenlet.join()
-    client_response = request_greenlet.get()
-
-    REQUESTS[request_id]['client_response'] = client_response
-    return REQUESTS[request_id]
-
-class register_endpoint(object):
-    '''
-    Decorator that allows you to dynamically register endpoints within your test
-    '''
-    # (file, function) -> {path -> endpoint}
-    function_endpoint_map = defaultdict(dict)
-
-    def __init__(self, endpoint_map):
-        self.endpoint_map = endpoint_map
-
-    def __call__(self, function):
-        '''
-        The decorator is "__call__"d with the function, we take that function
-        and determine which module and function name it is to store in the
-        class wide depandancy_dict
-        '''
-        module = inspect.getmodule(inspect.stack()[1][0])
-        key = (module.__name__, function.__name__)
-        self.function_endpoint_map[key] = self.endpoint_map
-
-        return function
-
-class testcase(object):
-    '''
-    Decorator used to decorate a function as a testcase
-    '''
-    functions = []
-
-    def __init__(self, function):
-        self.functions.append(function)
