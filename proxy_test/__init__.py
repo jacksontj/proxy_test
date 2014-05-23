@@ -90,7 +90,7 @@ class DynamicHTTPEndpoint(threading.Thread):
             If the tracking header is set, save the request
             '''
             if request.headers.get(self.TRACKING_HEADER):
-                self.tracked_requests[request.headers[self.TRACKING_HEADER]] = {'request': request}
+                self.tracked_requests[request.headers[self.TRACKING_HEADER]] = {'request': request.copy()}
 
 
         @self.app.hook('after_request')

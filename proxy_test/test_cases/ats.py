@@ -12,6 +12,7 @@ class ATSDynamicTest(BaseProxyTest):
     any configuration overrides that you may have
     '''
 
+    # TODO: dynamically set from setUpClass
     @property
     def ats_proxies(self):
         return {'http': 'http://127.0.0.2:12271',
